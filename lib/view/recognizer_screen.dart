@@ -307,12 +307,12 @@ class _RecognizerScreenState extends State<RecognizerScreen> {
   }
 
 
-  Future<String?> extractMRZ(String text) async {
-    RegExp regExp = RegExp(r"[A-Z0-9<]{90}");
-
-    final match = regExp.firstMatch(text.replaceAll('\n', ''));
-    return match?.group(0);
+  String? extractMRZ(String ocrText) {
+      // Normalize whitespace: replace multiple spaces with a single space
+      String normalizedText = ocrText.replaceAll("\n", "").replaceAll(" ","").replaceAll("«", "<");
+      return normalizedText.substring(normalizedText.length - 90, normalizedText.length);
   }
+
 
   bool isNIDBackPart(String text) {
     bool hasIssueDate = RegExp(r"Issue\s*Date[:\s]*(\d{2}\s\w+\s\d{4})", caseSensitive: false).hasMatch(text);
@@ -393,6 +393,7 @@ class _RecognizerScreenState extends State<RecognizerScreen> {
                                 Text("ID Number : ${data.value?["ID Number"]}"),
                                 const SizedBox(height: 10),
                                 Text("Issue Date : ${issueDate.value}"),
+                                Text("MRZ Number : ${mrzNumber.value}"),
 
 
                                 ElevatedButton(
