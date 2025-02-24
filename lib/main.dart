@@ -40,7 +40,7 @@ class _MyWidgetState extends State<MyWidget> {
     documentFormat: DocumentFormat.jpeg, // set output document format
     mode: ScannerMode.filter, // to control what features are enabled
     pageLimit: 1, // setting a limit to the number of pages scanned
-    isGalleryImport: false, // importing from the photo gallery
+    isGalleryImport: true, // importing from the photo gallery
   );
 
 
