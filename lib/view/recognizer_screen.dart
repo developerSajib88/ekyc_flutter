@@ -124,16 +124,19 @@ class _RecognizerScreenState extends State<RecognizerScreen> {
 
       // Regex for Date of Birth (Including OCR errors like "Bith")
       final dobRegExp = RegExp(
-        r'Date of (Birth|Bith)\s+(\d{2}\s\w{3}\s\d{4})',
+        r'Date of (Birth|Bith)\s+(\d{2}\s[A-Za-z]{3,}\s\d{4})|' // Capturing Group 1 & 2: Matches "Date of Birth" or "Date of Bith"
+        r'\b(\d{2}\s[A-Za-z]{3,}\s\d{4})\b',                    // Capturing Group 3: Matches standalone "12 May 2001"
         caseSensitive: false,
       );
 
       // Regex for NID Number (Flexible positioning and multi-line support)
       final nidRegExp = RegExp(
-        r'NID No\.?\s*\n?\s*(\d{3}\s\d{3}\s\d{4})|' // Case 1 & 3: NID No (with or without .) followed by number
-        r'(\d{3}\s\d{3}\s\d{4})\s*\n?\s*NID No\.?', // Case 2 & 4: number followed by NID No (with or without .)
+        r'\b(\d{3}\s\d{3}\s\d{4})\b|' // Capturing group 1: Standalone NID number
+        r'NID\s+No\.?\s*(\d{3}\s\d{3}\s\d{4})|' // Capturing group 2: "NID No." followed by number
+        r'(\d{3}\s\d{3}\s\d{4})\s*NID\s+No\.?', // Capturing group 3: Number followed by "NID No."
         caseSensitive: false,
       );
+
 
       // Extract Name
       final nameMatch = nameRegExp.firstMatch(normalizedText);
@@ -141,11 +144,11 @@ class _RecognizerScreenState extends State<RecognizerScreen> {
 
       // Extract Date of Birth
       final dobMatch = dobRegExp.firstMatch(normalizedText);
-      String dateOfBirth = dobMatch?.group(2)?.trim() ?? "Not Found";
+      String dateOfBirth = dobMatch?.group(2)?.trim() ?? dobMatch?.group(3)?.trim() ?? "Not Found";
 
       // Extract NID Number (even if it's not on the same line)
       final nidMatch = nidRegExp.firstMatch(ocrText);
-      String nidNumber = nidMatch?.group(1) ?? nidMatch?.group(2) ?? "Not Found";
+      String nidNumber = nidMatch?.group(1) ?? nidMatch?.group(2) ?? nidMatch?.group(3) ?? "Not Found";
 
       return {
         'Name': name,
@@ -297,13 +300,16 @@ class _RecognizerScreenState extends State<RecognizerScreen> {
 
 
   Future<String?> extractIssueDate(String text) async {
-    RegExp regExp = RegExp(
-      r"Issue\s*Date[:\s]*(\d{2}\s\w+\s\d{4})",
+    RegExp regExp =  RegExp(
+      r"Issue\s*Date[:\s]*(\d{2}\s[A-Za-z]{2,}\s\d{4})|" // Capturing Group 1
+      r"ssue\s*Date[:\s]*(\d{2}\s[A-Za-z]{2,}\s\d{4})|"  // Capturing Group 2 (Handles missing "I")
+      r"Date[:\s]*(\d{2}\s[A-Za-z]{2,}\s\d{4})|"         // Capturing Group 3
+      r"\b(\d{2}\s[A-Za-z]{2,}\s\d{4})\b",               // Capturing Group 4 (Standalone Date)
       caseSensitive: false,
     );
 
     final match = regExp.firstMatch(text);
-    return match?.group(1);
+    return match?.group(1) ?? match?.group(2) ?? match?.group(3) ?? match?.group(4) ?? "Not Found";
   }
 
 
