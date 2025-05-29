@@ -1,3 +1,4 @@
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:ekyc/view/face_detection_screen.dart';
@@ -8,8 +9,9 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 import 'package:image/image.dart' as img;
 
 class RecognizerScreen extends StatefulWidget {
-  final File image;
-  const RecognizerScreen({super.key,required this.image});
+  final File frontPart;
+  final File backPart;
+  const RecognizerScreen({super.key,required this.frontPart, required this.backPart});
 
   @override
   State<RecognizerScreen> createState() => _RecognizerScreenState();
@@ -20,6 +22,8 @@ class _RecognizerScreenState extends State<RecognizerScreen> {
   ValueNotifier<bool> isLoading = ValueNotifier<bool>(true);
   ValueNotifier<bool> isNotNIDCard = ValueNotifier<bool>(false);
   ValueNotifier<Map<String,String>?> data = ValueNotifier<Map<String,String>?>(null);
+  ValueNotifier<String?> issueDate = ValueNotifier<String?>(null);
+  ValueNotifier<String?> mrzNumber = ValueNotifier<String?>(null);
   ValueNotifier<File?> nidFace = ValueNotifier<File?>(null);
 
   // Future<void> recognizeText()async{
@@ -42,6 +46,19 @@ class _RecognizerScreenState extends State<RecognizerScreen> {
 
 
 
+  Future<void> detectFrontPart() async {
+
+    String extractedText = await extractText(widget.frontPart);
+
+    print("#########################$extractedText#########################");
+
+    if(1 == 1){
+      data.value = parseFrontPart(extractedText);
+    }else{
+      isNotNIDCard.value = true;
+    }
+    print("Extracted NID Data: ${parseFrontPart(extractedText)}");
+  }
 
 
 
@@ -56,64 +73,146 @@ class _RecognizerScreenState extends State<RecognizerScreen> {
   }
 
 
+  // Map<String, String>? parseFrontPart(String text) {
+  //   Map<String, String> nidData = {};
+  //
+  //   // Clean and normalize text
+  //   String cleanedText = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  //
+  //   // Extract Name: Assume it's after "Name" and is in uppercase
+  //   RegExp nameRegex = RegExp(r'Name\s*([A-Z\s.]+)', caseSensitive: false);
+  //   Match? nameMatch = nameRegex.firstMatch(cleanedText);
+  //   if (nameMatch != null) {
+  //     nidData['Name'] = nameMatch.group(1)?.trim() ?? '';
+  //   } else {
+  //    // return null;
+  //   }
+  //
+  //   // Extract Date of Birth: Allow both "Birth" and OCR typo "Bith"
+  //   RegExp dobRegex = RegExp(r'Date of B(?:ir|i)th\s*(\d{1,2}\s[A-Za-z]+\s\d{4})', caseSensitive: false);
+  //   Match? dobMatch = dobRegex.firstMatch(cleanedText);
+  //   if (dobMatch != null) {
+  //     nidData['Date of Birth'] = dobMatch.group(1)?.trim() ?? '';
+  //   } else {
+  //    // return null;
+  //   }
+  //
+  //   // Extract NID Number: Allow digits with or without spaces
+  //   RegExp idRegex = RegExp(r'NID No\.?\s*(\d{2,3}\s?\d{3}\s?\d{4}|\d{10,17})', caseSensitive: false);
+  //   Match? idMatch = idRegex.firstMatch(cleanedText);
+  //   if (idMatch != null) {
+  //     nidData['ID Number'] = idMatch.group(1)?.replaceAll(' ', '') ?? ''; // Remove spaces
+  //   } else {
+  //    // return null;
+  //   }
+  //
+  //   return nidData;
+  // }
 
-  Map<String, String>? parseNIDData(String text) {
-    Map<String, String> nidData = {};
 
-    // Extract Name (assuming name follows "Name:")
-    RegExp nameRegex = RegExp(r'Name:\s*(.*)');
-    Match? nameMatch = nameRegex.firstMatch(text);
-    if (nameMatch != null) {
-      nidData['Name'] = nameMatch.group(1) ?? '';
-    }else{
+
+  Map<String, String>? parseFrontPart(String ocrText) {
+    try {
+      // Combine all lines into one with space to handle line breaks
+      String normalizedText = ocrText.replaceAll('\n', ' ');
+
+      // Regex for Name (After "Name" until "Date of Birth" or "Date of Bith")
+      final nameRegExp = RegExp(
+        r'Name\s+([A-Z\s.,]+?)(?=\s*Date of (Birth|Bith))',
+        caseSensitive: false,
+      );
+
+      // Regex for Date of Birth (Including OCR errors like "Bith")
+      final dobRegExp = RegExp(
+        r'Date of (Birth|Bith)\s+(\d{2}\s[A-Za-z]{3,}\s\d{4})|' // Capturing Group 1 & 2: Matches "Date of Birth" or "Date of Bith"
+        r'\b(\d{2}\s[A-Za-z]{3,}\s\d{4})\b',                    // Capturing Group 3: Matches standalone "12 May 2001"
+        caseSensitive: false,
+      );
+
+      // Regex for NID Number (Flexible positioning and multi-line support)
+      final nidRegExp = RegExp(
+        r'\b(\d{3}\s\d{3}\s\d{4})\b|' // Capturing group 1: Standalone NID number
+        r'NID\s+No\.?\s*(\d{3}\s\d{3}\s\d{4})|' // Capturing group 2: "NID No." followed by number
+        r'(\d{3}\s\d{3}\s\d{4})\s*NID\s+No\.?', // Capturing group 3: Number followed by "NID No."
+        caseSensitive: false,
+      );
+
+
+      // Extract Name
+      final nameMatch = nameRegExp.firstMatch(normalizedText);
+      String name = nameMatch?.group(1)?.trim() ?? "Not Found";
+
+      // Extract Date of Birth
+      final dobMatch = dobRegExp.firstMatch(normalizedText);
+      String dateOfBirth = dobMatch?.group(2)?.trim() ?? dobMatch?.group(3)?.trim() ?? "Not Found";
+
+      // Extract NID Number (even if it's not on the same line)
+      final nidMatch = nidRegExp.firstMatch(ocrText);
+      String nidNumber = nidMatch?.group(1) ?? nidMatch?.group(2) ?? nidMatch?.group(3) ?? "Not Found";
+
+      return {
+        'Name': name,
+        'Date of Birth': dateOfBirth,
+        'ID Number': nidNumber
+      };
+    } catch (e) {
+      print("Error parsing NID: $e");
       return null;
     }
-
-    // Extract Date of Birth
-    RegExp dobRegex = RegExp(r'Date of Birth:\s*([\d]{1,2} [A-Za-z]+ \d{4})');
-    Match? dobMatch = dobRegex.firstMatch(text);
-    if (dobMatch != null) {
-      nidData['Date of Birth'] = dobMatch.group(1) ?? '';
-    }else{
-      return null;
-    }
-
-    // Extract ID Number (assuming format of a long number)
-    RegExp idRegex = RegExp(r'ID NO:\s*(\d{10,17})');
-    Match? idMatch = idRegex.firstMatch(text);
-    if (idMatch != null) {
-      nidData['ID Number'] = idMatch.group(1) ?? '';
-    }else{
-      return null;
-    }
-
-    return nidData;
   }
+
+
+
 
   bool isNIDCard(String extractedText) {
-    List<String> nidKeywords = ["National ID", "Govt. of", "ID No", "Date of Birth"];
-    for (var keyword in nidKeywords) {
-      if (extractedText.contains(keyword)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-
-  Future<void> detectNIDCard() async {
-
-    String extractedText = await extractText(widget.image);
-    if(isNIDCard(extractedText)){
-      data.value = parseNIDData(extractedText);
-    }else{
-      isNotNIDCard.value = true;
-    }
-    print("Extracted NID Data: ${data.value}");
+    List<String> nidKeywords = ["National ID Card", "Government of the People's Republic of Bangladesh", "Date of Birth", "NID No"];
+    return nidKeywords.every((keyword) => extractedText.contains(keyword));
   }
 
 
 
+  // Map<String, String>? parseFrontPart(String text) {
+  //   Map<String, String> nidData = {};
+  //
+  //   // Extract Name (assuming name follows "Name:")
+  //   RegExp nameRegex = RegExp(r'Name:\s*(.*)');
+  //   Match? nameMatch = nameRegex.firstMatch(text);
+  //   if (nameMatch != null) {
+  //     nidData['Name'] = nameMatch.group(1) ?? '';
+  //   }else{
+  //     return null;
+  //   }
+  //
+  //   // Extract Date of Birth
+  //   RegExp dobRegex = RegExp(r'Date of Birth:\s*([\d]{1,2} [A-Za-z]+ \d{4})');
+  //   Match? dobMatch = dobRegex.firstMatch(text);
+  //   if (dobMatch != null) {
+  //     nidData['Date of Birth'] = dobMatch.group(1) ?? '';
+  //   }else{
+  //     return null;
+  //   }
+  //
+  //   // Extract ID Number (assuming format of a long number)
+  //   RegExp idRegex = RegExp(r'ID NO:\s*(\d{10,17})');
+  //   Match? idMatch = idRegex.firstMatch(text);
+  //   if (idMatch != null) {
+  //     nidData['ID Number'] = idMatch.group(1) ?? '';
+  //   }else{
+  //     return null;
+  //   }
+  //
+  //   return nidData;
+  // }
+  //
+  // bool isNIDCard(String extractedText) {
+  //   List<String> nidKeywords = ["National ID", "Govt. of", "ID No", "Date of Birth"];
+  //   for (var keyword in nidKeywords) {
+  //     if (extractedText.contains(keyword)) {
+  //       return true;
+  //     }
+  //   }
+  //   return false;
+  // }
 
   /// ======CAPTURED NID FACE==========
 
@@ -167,13 +266,13 @@ class _RecognizerScreenState extends State<RecognizerScreen> {
 
   Future<void> extractNIDProfileImage() async {
 
-    Face? face = await detectFace(widget.image);
+    Face? face = await detectFace(widget.frontPart);
     if (face == null) {
       print("No face found on the NID card.");
       return;
     }
 
-    File? faceImage = await cropFace(widget.image, face);
+    File? faceImage = await cropFace(widget.frontPart, face);
     if (faceImage != null) {
       nidFace.value = faceImage;
       print("Profile image extracted and saved at: ${faceImage.path}");
@@ -183,13 +282,63 @@ class _RecognizerScreenState extends State<RecognizerScreen> {
 
 
 
+
+  Future<void> detectBackPart() async {
+
+    String extractedText = await extractText(widget.backPart);
+    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>$extractedText");
+    if(1 == 1){
+      issueDate.value = await extractIssueDate(extractedText);
+      mrzNumber.value = await extractMRZ(extractedText);
+    }else{
+      isNotNIDCard.value = true;
+    }
+    print("Back Part: ${issueDate.value}");
+    print("Back Part MRZ: ${mrzNumber.value}");
+  }
+
+
+
+  Future<String?> extractIssueDate(String text) async {
+    RegExp regExp =  RegExp(
+      r"Issue\s*Date[:\s]*(\d{2}\s[A-Za-z]{2,}\s\d{4})|" // Capturing Group 1
+      r"ssue\s*Date[:\s]*(\d{2}\s[A-Za-z]{2,}\s\d{4})|"  // Capturing Group 2 (Handles missing "I")
+      r"Date[:\s]*(\d{2}\s[A-Za-z]{2,}\s\d{4})|"         // Capturing Group 3
+      r"\b(\d{2}\s[A-Za-z]{2,}\s\d{4})\b",               // Capturing Group 4 (Standalone Date)
+      caseSensitive: false,
+    );
+
+    final match = regExp.firstMatch(text);
+    return match?.group(1) ?? match?.group(2) ?? match?.group(3) ?? match?.group(4) ?? "Not Found";
+  }
+
+
+  String? extractMRZ(String ocrText) {
+      // Normalize whitespace: replace multiple spaces with a single space
+      String normalizedText = ocrText.replaceAll("\n", "").replaceAll(" ","").replaceAll("«", "<");
+      return normalizedText.substring(normalizedText.length - 90, normalizedText.length);
+  }
+
+
+  bool isNIDBackPart(String text) {
+    bool hasIssueDate = RegExp(r"Issue\s*Date[:\s]*(\d{2}\s\w+\s\d{4})", caseSensitive: false).hasMatch(text);
+    bool hasMRZ = RegExp(r"[A-Z0-9<]{90}").hasMatch(text.replaceAll('\n', ''));
+
+    return hasIssueDate && hasMRZ;
+  }
+
+
+
+
   @override
   void initState(){
     // TODO: implement initState
     super.initState();
-    detectNIDCard().whenComplete((){
+    detectFrontPart().whenComplete((){
       extractNIDProfileImage().whenComplete((){
-        isLoading.value = false;
+        detectBackPart().whenComplete((){
+          isLoading.value = false;
+        });
       });
     });
   }
@@ -249,6 +398,8 @@ class _RecognizerScreenState extends State<RecognizerScreen> {
                                 const SizedBox(height: 10),
                                 Text("ID Number : ${data.value?["ID Number"]}"),
                                 const SizedBox(height: 10),
+                                Text("Issue Date : ${issueDate.value}"),
+                                Text("MRZ Number : ${mrzNumber.value}"),
 
 
                                 ElevatedButton(
